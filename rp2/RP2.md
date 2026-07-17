@@ -24,6 +24,11 @@ These are intended to demonstrate the use of Pico-specific hardware.
   &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;4.3.2 [busy](./RP2.md#432-busy)  
  4.4 [Design](./RP2.md#44-design)  
  4.5 [Limitations](./RP2.md#45-limitations)  
+5. [Proximity](./RP2.md#5-proximity) Detect human proximity using capacitance.  
+ 5.1 [Wiring](./RP2.md#51-wiring)  
+ 5.2 [Proximity Class](./RP2.md#52-proximity-class)  
+ 5.3 [Demo](./RP2.md#53-demo) The demo script.  
+ 5.4 [Operation](./RP2.md#54-operation) How it works.  
 
 To install the demos issue:
 ```bash
@@ -33,6 +38,7 @@ They will be installed in directories:
 * `spi` SPI modules and demos.
 * `measure_pulse` Pulse measurement.
 * `rmt` Pulse train output.
+* `proximity` Proximity detection.
 
 # 1. Nonblocking SPI master
 
@@ -377,3 +383,77 @@ frequencies. This is because each pulse causes an interrupt: MicroPython is
 unable to support high IRQ rates.
 [This library](https://github.com/robert-hh/RP2040-Examples/tree/master/pulses)
 is more capable in this regard.
+
+# 5 Proximity
+
+The `Proximity` class enables detection of human proximity by measuring very small
+changes in capacitance. Its design draws on the work of
+[Matthias Wandel](https://github.com/Matthias-Wandel/Pico-femtofarad) and that of
+[AncientJames](https://github.com/AncientJames/jtouch) with the following changes:
+* Code is asynchronous with detection operating as a background task. Enables
+applications to be synchronous or asynchronous.
+* Object based design allows for multiple detectors operating concurrently.
+* Implementation is simplified by not attempting to measure capacitance between
+two points. Capacitance is measured between an aerial and ground.
+* For human proximity high speed is not required. Sampling at 500Hz followed by
+simple signal processing achieves reasonable sensitivity and noise rejection.
+* Human-written code with code comments and operation description aids hacking!
+
+Owing to a problem with early silicon RP2350 support requires chip stepping
+level >= A3. The stepping level is indicated by the last two characters of the
+chip ID on the package surface.
+
+Possible applications:
+* Kinetic artworks.
+* Theremin-type musical instruments.
+* Toys and novelties.
+
+![Image](./proximity/lashup.JPG)
+
+## 5.1 Wiring
+
+A pin to be used as a detector must be pulled down with a physical resistor,
+typically 4.7MΩ. Detection requires a conductive object such as a piece of
+aluminium plate or foil. The `Gnd` line should also be linked to a similar object:
+human proximity causes a (very small) capacitance to be added between the two
+objects. The driver aims to detect that change. Ideally `Gnd` should be linked
+to any nearby conductive objects and also to safety earth.
+
+## 5.2 Proximity Class
+
+The constructor takes three args:
+* `sm_no=0` State machine number: each instance must be different.
+* `pin_no=2` GPIO no. Pin must be pulled down with 4.7MΩ.
+* `freq=500` Sampling frequency in Hz.
+
+Method:
+* `fetch(offs=0)` Returns an integer proportional to capacitance. The arg specifies
+an offset, allowing stray capacitance to be allowed for.
+* `deinit()` Stops the instance's timer and state machine.
+
+## 5.3 Demo
+
+The program `duo.py` illustrates two instances working concurrently. Output is by
+print statements, also optionally via a NeoPixel array. The demo pauses for three
+seconds before measuring stray capacitance: this allows the user to vacate the area
+around the antennas. At the end of this period the value retrieved from `fetch()` is
+used as the `offs` argument to subsequent `fetch` calls, compensating for stray
+capacitance.
+
+## 5.4 Operation
+
+Initially the state machine waits for Python to `put` a count value which is stored in `y`.
+Thereafter the SM runs continuously, pushing data from `x` until the FIFO fills. From
+that point the SM waits for Pyhon to `get` a value, when the SM calculates the next one.
+Before the SM waits for a `get`, the pin is defined as an output and set high. In this
+period the capacitance is charged. After the `get` occurs the count
+value is copied from `y` to `x` and the pin is changed to an input. The SM loops,
+decrementing `x`, until the pin reads low. At this point `x<<2` is pushed to the FIFO.
+
+The Python code uses a `Timer` hard ISR to retrieve the data. Note `sm.get()` is called
+with a 2-bit right shift. This guarantees (to the Python runtime) that the value will fit
+in a small integer, allowing the hard ISR.
+
+Data is stored in a circular buffer: `fetch()` performs simple low pass filtering by
+taking an average of the buffer values. This crude signal processing provides noise
+rejection. `fetch` may be called at any time with no need for synchronisation.
