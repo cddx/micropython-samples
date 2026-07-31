@@ -29,6 +29,7 @@ These are intended to demonstrate the use of Pico-specific hardware.
  5.2 [Proximity Class](./RP2.md#52-proximity-class)  
  5.3 [Demo](./RP2.md#53-demo) The demo script.  
  5.4 [Operation](./RP2.md#54-operation) How it works.  
+ 5.5 [Theory](./RP2.md#55-theory) Why not measure frequency?
 
 To install the demos issue:
 ```bash
@@ -457,3 +458,23 @@ in a small integer, allowing the hard ISR.
 Data is stored in a circular buffer: `fetch()` performs simple low pass filtering by
 taking an average of the buffer values. This crude signal processing provides noise
 rejection. `fetch` may be called at any time with no need for synchronisation.
+
+## 5.5 Theory
+
+It might seem that the design could be simplified by configuring the SM as an
+oscillator and measuring the frequency. In this design, as soon as the pin reads
+low the SM configures it as an output and sets it high for a period. It also
+increments a counter. The SM then sets the pin to an input and the cycle
+repeats. Python code runs a hard ISR at a relatively low rate (e.g. 100ms) and
+reads the value of the counter (which the SM then resets). The file
+`proximity_freq.py` illustrates this approach. It offers a `Proximity` class
+ with the same API as above, except that the default `freq` is 10Hz. Advantages:
+* Lower ISR rate means a reduced CPU overhead.
+* Simpler code with implicit averaging over multiple detection cycles.
+* No need for a physical resistor (it uses the internal pull-down).
+
+However it has a major drawback if multiple instances are created: the instances
+interact. This happens because of unwanted electrical coupling which causes the
+oscillators to affect each other. A key attribute of the standard version is
+that each instance takes a reading at a time when other instances are driving
+their pins high. There is no opportunity for interaction.

@@ -10,6 +10,7 @@
     ["spi/spi_master.py", "github:peterhinch/micropython-samples/rp2/spi/spi_master.py"],
     ["spi/spi_slave.py", "github:peterhinch/micropython-samples/rp2/spi/spi_slave.py"],
     ["proximity/proximity.py", "github:peterhinch/micropython-samples/rp2/proximity/proximity.py"],
+    ["proximity/proximity_freq.py", "github:peterhinch/micropython-samples/rp2/proximity/proximity_freq.py"],
     ["proximity/duo.py", "github:peterhinch/micropython-samples/rp2/proximity/duo.py"]
   ],
   "version": "0.1"
